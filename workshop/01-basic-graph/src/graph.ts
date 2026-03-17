@@ -29,4 +29,12 @@ export class Graph {
 
         this.connections.get(from)!.push({ from, to });
     }
+
+    getConnections(id: NodeId): Edge[] {
+        if (!this.connections.has(id)) {
+            throw new Error(`No data for node: ${id}`);
+        }
+
+        return this.connections.get(id)!;
+    }
 }

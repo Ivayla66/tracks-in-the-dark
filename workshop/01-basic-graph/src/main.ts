@@ -9,3 +9,9 @@ graph.addNode("C");
 graph.addEdge("A", "B");
 graph.addEdge("B", "C");
 graph.addEdge("A", "C");
+
+const connections = graph.getConnections("A");
+
+connections.forEach(edge => {
+    console.log(`A --> ${edge.to}`);
+})
