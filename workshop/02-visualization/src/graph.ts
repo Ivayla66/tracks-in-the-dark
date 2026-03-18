@@ -71,14 +71,12 @@ export class Graph {
                 context.lineTo(-5, 5);
                 context.closePath();
                 context.fill();
-                context.stroke();
                 context.restore();
             }
         }
 
         // Draw the nodes
         context.fillStyle = 'orange';
-
         for (const node of this.nodes.values()) {
             context.beginPath();
             context.arc(node.position.x, node.position.y, 10, 0, Math.PI * 2);

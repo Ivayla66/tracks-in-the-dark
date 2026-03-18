@@ -251,3 +251,52 @@ render(canvas: HTMLCanvasElement): void {
     }
 }
 ```
+
+
+## Transition to rail networks
+
+Now that the graph is ready, it looks suspiciously like a rail network.
+The nodes can be seen as switches, and the edges can be seen as tracks.
+By simply renaming the components, the graph can be turned into a rail network.
+The `Node` interface is renamed to `Switch`, the `Edge` interface is renamed to `Track`, and the `Graph`.
+Additional information can be added to the tracks, such as the number of cars on the track.
+This information can then be used inside the rendering method.
+Let's first add the information.
+
+```ts
+export interface Track {
+    from: NodeId;
+    to: NodeId;
+    cars: number;
+}
+```
+
+Now that the information is added, it can be used to change the color of the track.
+If there are cars on the track, it is colored red, otherwise it is colored white.
+The code regarding the styling is moved into the loop, so it is applied to each track separately.
+A ternary operator is used to determine the color, it is a simple if-else statement in one line.
+If the condition before the `?` is true, the first value is used, otherwise the value after `:` is used.
+
+```ts
+// Set the color and width of the track based on the number of cars
+context.strokeStyle = track.cars > 0 ? 'red' : 'white';
+context.fillStyle = track.cars > 0 ? 'red' : 'white';
+context.lineWidth = 2;
+```
+
+Now the graph represents a rail network, with switches and tracks.
+It shows which tracks are occupied by cars, and which tracks are empty.
+This complete the basic implementation of the graph, and the visualization of the rail network.
+
+
+## Other implementations of graphs
+
+Finally, it is important to note that there are many other implementations of graphs.
+**Social networks** are a type of graph, where the nodes represent people and the edges represent friendships.
+This way, they can tell you who your friends are, and who your friends' friends are.
+**Road networks** are another type of graph, where the nodes represent intersections and the edges represent roads.
+Similarly, it can be used for metro networks, like the one in Rotterdam.
+**Frequently bought together** is a type of graph used in e-commerce, where the nodes represent products and the edges represent products that are frequently bought together.
+**Category Theory** is a branch of mathematics that uses graphs to represent mathematical structures and their relationships.
+**Data Science** uses graphs to represent data and the relationships between data points, such as in clustering and classification algorithms.
+And many more, the possibilities are endless.
