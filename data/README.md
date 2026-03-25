@@ -24,6 +24,15 @@ The following files are included:
 - `log.expert.broken.json`: A broken log file, with missing data and inconsistencies.
 
 
+## points.json
+
+The `points.json` file contains x and y coordinates for connector in the yard.
+The coordinates are used for the visualization, to place the connectors in the correct position.
+It uses the coordination system used by the HTML Canvas element, where the origin (0, 0) is in the top left corner, the x-axis goes to the right, and the y-axis goes downwards.
+The connectors match those provided in the `yard.json` file.
+The maximum value for x is 500, the maximum value for y is 200.
+
+
 ## yard.json
 
 The `yard.json` file contains information about the layout of the yard.
