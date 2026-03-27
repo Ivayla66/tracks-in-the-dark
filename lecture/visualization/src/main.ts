@@ -226,11 +226,12 @@ class YardSimulatorApp {
         }
 
         this.elements.routeButton.addEventListener('click', () => {
-            const path = this.findRoute(this.elements.fromTrack.value, this.elements.toTrack.value);
+            const path = this.findRoute(this.elements.fromTrack.value, this.elements.toTrack.value, true);
             if (!path) {
                 this.pushAlert('No safe route found for that move with the current switch configuration.');
                 this.highlightedRoute = [];
             } else {
+                this.alignSwitchesForRoute(path);
                 this.highlightedRoute = path;
                 this.pushAlert(`Reserved route ${path.join(' -> ')}`);
             }
@@ -398,6 +399,7 @@ class YardSimulatorApp {
         const snapshot: YardSnapshot = {
             scenarioLabel: this.currentScenario.label,
             timestampLabel: this.builtEvents.length > 0 ? formatTimestamp(now) : 'Manual sandbox',
+            currentTimeMs: now,
             selectedTrackId: this.elements.fromTrack.value || null,
             highlightedRoute: this.highlightedRoute,
             activeSensors: Array.from(activeSensors.values()),
@@ -471,7 +473,7 @@ class YardSimulatorApp {
         const count = Math.max(1, Number(this.elements.moveCount.value) || 1);
         const source = this.manualState.tracks[sourceId];
         const target = this.manualState.tracks[targetId];
-        const route = this.findRoute(sourceId, targetId);
+        const route = this.findRoute(sourceId, targetId, true);
 
         if (!route) {
             this.pushAlert(`Move blocked: no route from ${sourceId} to ${targetId}.`);
@@ -492,16 +494,21 @@ class YardSimulatorApp {
         }
 
         const movedCars = source.cars.splice(source.cars.length - count, count);
+        this.alignSwitchesForRoute(route);
         target.cars.push(...movedCars);
         source.axles = source.cars.length * 4;
         target.axles = target.cars.length * 4;
+        source.activeAt = Date.now();
+        target.activeAt = Date.now();
+        source.activeDirection = 'forward';
+        target.activeDirection = 'forward';
         source.anomaly = null;
         target.anomaly = null;
         this.highlightedRoute = route;
         this.pushAlert(`Moved ${movedCars.join(', ')} from ${sourceId} to ${targetId}.`);
     }
 
-    private findRoute(fromTrackId: string, toTrackId: string): string[] | null {
+    private findRoute(fromTrackId: string, toTrackId: string, useAllSwitchBranches = false): string[] | null {
         if (fromTrackId === toTrackId) {
             return [fromTrackId];
         }
@@ -516,7 +523,7 @@ class YardSimulatorApp {
             }
 
             const current = path[path.length - 1];
-            for (const next of this.getAdjacentTracks(current)) {
+            for (const next of this.getAdjacentTracks(current, useAllSwitchBranches)) {
                 if (visited.has(next)) {
                     continue;
                 }
@@ -534,11 +541,11 @@ class YardSimulatorApp {
         return null;
     }
 
-    private getAdjacentTracks(trackId: string): string[] {
+    private getAdjacentTracks(trackId: string, useAllSwitchBranches: boolean): string[] {
         const adjacent: string[] = [];
 
         for (const connector of this.yard.connectors) {
-            const links = this.getConnectorLinks(connector);
+            const links = this.getConnectorLinks(connector, useAllSwitchBranches);
             for (const link of links) {
                 if (link[0] === trackId) {
                     adjacent.push(link[1]);
@@ -551,9 +558,17 @@ class YardSimulatorApp {
         return adjacent;
     }
 
-    private getConnectorLinks(connector: YardConnector): Array<[string, string]> {
+    private getConnectorLinks(connector: YardConnector, useAllSwitchBranches = false): Array<[string, string]> {
         if (connector.type === 'corner') {
             return [[connector.incoming_tracks[0], connector.outgoing_tracks[0]]];
+        }
+
+        if (useAllSwitchBranches) {
+            if (connector.incoming_tracks.length === 1) {
+                return connector.outgoing_tracks.map(trackId => [connector.incoming_tracks[0], trackId]);
+            }
+
+            return connector.incoming_tracks.map(trackId => [trackId, connector.outgoing_tracks[0]]);
         }
 
         const state = this.manualState.switches[connector.id]?.actual ?? 'straight';
@@ -565,6 +580,31 @@ class YardSimulatorApp {
 
         const branch = state === 'straight' ? connector.incoming_tracks[0] : connector.incoming_tracks[1];
         return [[branch, connector.outgoing_tracks[0]]];
+    }
+
+    private alignSwitchesForRoute(route: string[]): void {
+        for (let index = 0; index < route.length - 1; index += 1) {
+            const fromTrack = route[index];
+            const toTrack = route[index + 1];
+
+            for (const connector of this.yard.connectors) {
+                if (connector.type !== 'switch') {
+                    continue;
+                }
+
+                if (connector.incoming_tracks.length === 1 && connector.incoming_tracks[0] === fromTrack) {
+                    const desiredState = connector.outgoing_tracks[0] === toTrack ? 'straight' : 'diverging';
+                    this.manualState.switches[connector.id].actual = desiredState;
+                    this.manualState.switches[connector.id].reported = desiredState;
+                }
+
+                if (connector.outgoing_tracks[0] === toTrack && connector.incoming_tracks.includes(fromTrack)) {
+                    const desiredState = connector.incoming_tracks[0] === fromTrack ? 'straight' : 'diverging';
+                    this.manualState.switches[connector.id].actual = desiredState;
+                    this.manualState.switches[connector.id].reported = desiredState;
+                }
+            }
+        }
     }
 
     private render(): void {

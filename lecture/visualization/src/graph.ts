@@ -51,6 +51,7 @@ export interface SwitchRuntimeState {
 export interface YardSnapshot {
     scenarioLabel: string;
     timestampLabel: string;
+    currentTimeMs: number;
     selectedTrackId: string | null;
     highlightedRoute: string[];
     activeSensors: string[];
@@ -74,7 +75,8 @@ const COLOR = {
     rail: '#afc4cf',
     active: '#6bd0ff',
     occupied: '#f3a447',
-    route: '#7ad38b',
+    route: '#36f2a4',
+    routeGlow: 'rgba(54, 242, 164, 0.28)',
     danger: '#ff7d66',
     connector: '#f2f6f9',
     siding: '#7e98a7',
@@ -193,9 +195,19 @@ export class YardRenderer {
                 stroke = COLOR.danger;
             }
 
+            if (isHighlighted) {
+                context.beginPath();
+                context.lineCap = 'round';
+                context.lineWidth = 14;
+                context.strokeStyle = COLOR.routeGlow;
+                context.moveTo(geometry.start.x, geometry.start.y);
+                context.lineTo(geometry.end.x, geometry.end.y);
+                context.stroke();
+            }
+
             context.beginPath();
             context.lineCap = 'round';
-            context.lineWidth = isSelected ? 8 : 6;
+            context.lineWidth = isHighlighted ? 10 : isSelected ? 8 : 6;
             context.strokeStyle = stroke;
             context.moveTo(geometry.start.x, geometry.start.y);
             context.lineTo(geometry.end.x, geometry.end.y);
@@ -208,17 +220,7 @@ export class YardRenderer {
             context.lineTo(geometry.end.x, geometry.end.y);
             context.stroke();
 
-            context.save();
-            context.translate(geometry.center.x, geometry.center.y);
-            context.rotate(geometry.angle);
-            context.fillStyle = stroke;
-            context.beginPath();
-            context.moveTo(8, 0);
-            context.lineTo(-7, -5);
-            context.lineTo(-7, 5);
-            context.closePath();
-            context.fill();
-            context.restore();
+            this.drawDirectionMarker(context, geometry, runtime, stroke);
 
             const labelYOffset = track.type === 'siding' ? 16 : -14;
             context.fillStyle = COLOR.text;
@@ -226,6 +228,7 @@ export class YardRenderer {
             context.fillText(track.id, geometry.center.x - 16, geometry.center.y + labelYOffset);
 
             if (runtime.cars.length > 0) {
+                this.drawCarsOnTrack(context, geometry, runtime, snapshot.currentTimeMs);
                 context.fillStyle = COLOR.muted;
                 context.font = '10px "Segoe UI"';
                 context.fillText(`${runtime.cars.length} cars`, geometry.center.x - 18, geometry.center.y + labelYOffset + 11);
@@ -276,6 +279,88 @@ export class YardRenderer {
         context.font = '12px "Segoe UI"';
         context.fillText(snapshot.timestampLabel, 28, 57);
         context.fillText(`Hot sensors: ${snapshot.activeSensors.length}`, 28, 73);
+    }
+
+    private drawDirectionMarker(
+        context: CanvasRenderingContext2D,
+        geometry: TrackGeometry,
+        runtime: TrackRuntimeState,
+        stroke: string
+    ): void {
+        context.save();
+        context.translate(geometry.center.x, geometry.center.y);
+
+        if (runtime.activeDirection === 'reverse') {
+            context.rotate(geometry.angle + Math.PI);
+        } else if (runtime.activeDirection === 'forward') {
+            context.rotate(geometry.angle);
+        } else {
+            context.rotate(geometry.angle);
+            context.strokeStyle = COLOR.muted;
+            context.lineWidth = 2;
+            context.beginPath();
+            context.moveTo(-7, -4);
+            context.lineTo(0, 0);
+            context.lineTo(-7, 4);
+            context.moveTo(7, -4);
+            context.lineTo(0, 0);
+            context.lineTo(7, 4);
+            context.stroke();
+            context.restore();
+            return;
+        }
+
+        context.fillStyle = stroke;
+        context.beginPath();
+        context.moveTo(8, 0);
+        context.lineTo(-7, -5);
+        context.lineTo(-7, 5);
+        context.closePath();
+        context.fill();
+        context.restore();
+    }
+
+    private drawCarsOnTrack(
+        context: CanvasRenderingContext2D,
+        geometry: TrackGeometry,
+        runtime: TrackRuntimeState,
+        currentTimeMs: number
+    ): void {
+        const visibleCars = runtime.cars.slice(0, 5);
+        const spacing = 18;
+        const startOffset = -((visibleCars.length - 1) * spacing) / 2;
+        const angle = runtime.activeDirection === 'reverse' ? geometry.angle + Math.PI : geometry.angle;
+        const motionAge = runtime.activeAt === null ? Number.POSITIVE_INFINITY : currentTimeMs - runtime.activeAt;
+        const motionRatio = motionAge >= 0 && motionAge < 5000 ? 1 - motionAge / 5000 : 0;
+        const directionMultiplier = runtime.activeDirection === 'reverse' ? -1 : 1;
+        const motionShift = motionRatio * 24 * directionMultiplier;
+
+        for (let index = 0; index < visibleCars.length; index += 1) {
+            const offset = startOffset + index * spacing + motionShift;
+            const x = geometry.center.x + Math.cos(geometry.angle) * offset;
+            const y = geometry.center.y + Math.sin(geometry.angle) * offset;
+
+            context.save();
+            context.translate(x, y);
+            context.rotate(angle);
+            context.fillStyle = runtime.anomaly ? COLOR.danger : '#f6efe2';
+            context.strokeStyle = '#09141b';
+            context.lineWidth = 1.5;
+            context.beginPath();
+            context.roundRect(-8, -5, 16, 10, 3);
+            context.fill();
+            context.stroke();
+
+            context.fillStyle = '#0d1f28';
+            context.fillRect(-2, -4, 4, 8);
+            context.restore();
+        }
+
+        if (runtime.cars.length > visibleCars.length) {
+            context.fillStyle = COLOR.text;
+            context.font = 'bold 10px "Segoe UI"';
+            context.fillText(`+${runtime.cars.length - visibleCars.length}`, geometry.center.x + 18, geometry.center.y - 10);
+        }
     }
 
     private buildTrackGeometry(trackId: string): TrackGeometry {
